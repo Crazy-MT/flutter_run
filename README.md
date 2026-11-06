@@ -2,6 +2,22 @@
 
 Flutter 桌面运行工具，面向 macOS、Windows 和 Linux。选择本地 Flutter SDK 和已有项目，发现设备、启动调试会话、热重载和热重启；在同一窗口查看官方 DevTools 和 Flutter 日志，Android 设备还可查看 Logcat。
 
+## 界面截图
+
+以下截图由当前 Flutter 界面渲染生成，项目、设备和日志均使用演示数据。
+
+### 运行与日志
+
+![运行界面与彩色日志](docs/screenshots/01-run.png)
+
+### Android Logcat
+
+![Android Logcat 界面](docs/screenshots/02-logcat.png)
+
+### 项目与 Flutter SDK
+
+![项目与 FVM SDK 设置](docs/screenshots/03-fvm-settings.png)
+
 ## 开发运行
 
 使用 FVM 固定的 Flutter 版本：
