@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'protocol.dart';
 import 'log_entry.dart';
 
+enum RunMode { debug, profile, release }
+
 class RunSession extends ChangeNotifier {
   Process? _process;
   Future<Process>? _launch;
@@ -16,6 +18,9 @@ class RunSession extends ChangeNotifier {
   final Map<int, String> _pending = {};
   String? appId;
   String? devToolsUri;
+  int? processId;
+  int _processGeneration = 0;
+  RunMode mode = RunMode.debug;
   bool running = false;
   bool starting = false;
   final List<LogEntry> logs = [];
@@ -27,15 +32,18 @@ class RunSession extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> start(String flutter, String project, String device) async {
+  Future<void> start(String flutter, String project, String device,
+      {RunMode mode = RunMode.debug}) async {
     if (_process != null || starting) return;
+    this.mode = mode;
     starting = true;
     lastOperation = null;
     _pending.clear();
     notifyListeners();
     try {
       _stopRequested = false;
-      final launch = Process.start(flutter, ['run', '--machine', '-d', device],
+      final launch = Process.start(
+          flutter, ['run', '--machine', '--${mode.name}', '-d', device],
           workingDirectory: project, runInShell: Platform.isWindows);
       _launch = launch;
       final process = await launch;
@@ -61,6 +69,8 @@ class RunSession extends ChangeNotifier {
           _process = null;
           appId = null;
           devToolsUri = null;
+          _processGeneration++;
+          processId = null;
           running = false;
           starting = false;
           _log('Flutter 进程已退出 ($code)', isError: code != 0);
@@ -99,11 +109,16 @@ class RunSession extends ChangeNotifier {
       case 'app.started':
         running = true;
         starting = false;
+      case 'app.debugPort':
+        final uri = params['wsUri'];
+        if (uri is String) unawaited(_readProcessId(uri));
       case 'app.devTools':
         devToolsUri = params['uri'] as String?;
       case 'app.log':
         _log('${params['log'] ?? ''}', isError: params['error'] == true);
       case 'app.stop':
+        _processGeneration++;
+        processId = null;
         running = false;
         starting = false;
         devToolsUri = null;
@@ -115,8 +130,32 @@ class RunSession extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> _readProcessId(String uri) async {
+    final currentApp = appId;
+    final generation = ++_processGeneration;
+    WebSocket? socket;
+    try {
+      socket = await WebSocket.connect(uri).timeout(const Duration(seconds: 5));
+      socket.add(jsonEncode({'jsonrpc': '2.0', 'id': 1, 'method': 'getVM'}));
+      final response = await socket.first.timeout(const Duration(seconds: 5));
+      final result = jsonDecode(response as String)['result'];
+      if (!_disposed &&
+          appId == currentApp &&
+          generation == _processGeneration &&
+          result is Map &&
+          result['pid'] is int) {
+        processId = result['pid'] as int;
+        notifyListeners();
+      }
+    } catch (_) {
+      // The VM service may disappear while the app is stopping.
+    } finally {
+      await socket?.close();
+    }
+  }
+
   void restart({required bool fullRestart}) {
-    if (appId != null && _process != null) {
+    if (mode == RunMode.debug && appId != null && _process != null) {
       final id = ++_id;
       final action = fullRestart ? '热重启' : '热重载';
       _pending[id] = action;
@@ -169,6 +208,8 @@ class RunSession extends ChangeNotifier {
     lastOperation = '已停止';
     appId = null;
     devToolsUri = null;
+    _processGeneration++;
+    processId = null;
     notifyListeners();
   }
 

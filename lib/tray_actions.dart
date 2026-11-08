@@ -3,8 +3,14 @@ import 'sessions.dart';
 List<bool> trayActions(
         {required bool hasDevice,
         required bool running,
-        required bool starting}) =>
-    [hasDevice && !running && !starting, running, running, running || starting];
+        required bool starting,
+        bool debug = true}) =>
+    [
+      hasDevice && !running && !starting,
+      running && debug,
+      running && debug,
+      running || starting
+    ];
 
 Future<void> dispatchTrayAction(int index, String? device, Sessions sessions,
     Future<void> Function(String) run) async {

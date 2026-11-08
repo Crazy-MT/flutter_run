@@ -18,7 +18,7 @@ void main() {
     final dir = await Directory.systemTemp.createTemp('multi-run');
     final script = File('${dir.path}/flutter');
     await script.writeAsString('''#!/bin/sh
-id="\$4"
+id="\$5"
 printf '%s\\n' "[{\\"event\\":\\"app.start\\",\\"params\\":{\\"appId\\":\\"\$id\\"}}]" "[{\\"event\\":\\"app.started\\",\\"params\\":{}}]"
 while read line; do
   case "\$line" in

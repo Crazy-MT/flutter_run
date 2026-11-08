@@ -64,6 +64,7 @@ elif [ "\$1" = run ]; then
   echo "\$*" > "${dir.path}/fvm-run-arguments"
   echo '[{"event":"app.start","params":{"appId":"fvm-app"}}]'
   echo '[{"event":"app.started","params":{}}]'
+  for i in \$(seq 1 100); do printf '[{"event":"app.log","params":{"log":"log-%s"}}]\\n' "\$i"; done
   while read line; do case "\$line" in *app.stop*) exit 0;; esac; done
 else
   echo '[]'
@@ -89,6 +90,11 @@ fi
       await tester.pump();
     }
     expect(find.text('FVM device'), findsWidgets);
+    expect(find.text('Debug'), findsOneWidget);
+    await tester.tap(find.byTooltip('运行模式'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Profile').last);
+    await tester.pumpAndSettle();
     final runButton = find.widgetWithText(FilledButton, '运行');
     for (var i = 0;
         i < 100 && tester.widget<FilledButton>(runButton).onPressed == null;
@@ -106,7 +112,15 @@ fi
       await tester.pump();
     }
     expect(arguments.existsSync(), isTrue, reason: '项目 FVM 应被用于启动');
-    expect(arguments.readAsStringSync().trim(), 'run --machine -d fvm-device');
+    expect(arguments.readAsStringSync().trim(),
+        'run --machine --profile -d fvm-device');
+    for (var i = 0; i < 100 && find.text('log-100').evaluate().isEmpty; i++) {
+      await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 100)));
+      await tester.pump();
+    }
+    expect(find.text('log-100'), findsOneWidget);
+    expect(find.text('log-1'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     dir.deleteSync(recursive: true);
   });

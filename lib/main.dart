@@ -46,7 +46,9 @@ class _HomeState extends State<Home> {
   List<Map<String, dynamic>> devices = [], emulators = [];
   String? device;
   String priority = 'V', tab = '运行日志';
+  RunMode runMode = RunMode.debug;
   Process? logcat;
+  int? logcatPid;
   tray.TrayIcon? trayIcon;
   tray.Menu? trayMenu;
   final List<tray.MenuItem> trayItems = [];
@@ -197,7 +199,8 @@ class _HomeState extends State<Home> {
           hasDevice:
               !busy && device != null && connectedDevices.contains(device),
           running: current?.running ?? false,
-          starting: current?.starting ?? false);
+          starting: current?.starting ?? false,
+          debug: current?.mode == RunMode.debug);
       for (var i = 0; i < selectedTrayItems.length; i++) {
         selectedTrayItems[i].isEnabled = enabled[i];
       }
@@ -207,12 +210,14 @@ class _HomeState extends State<Home> {
       final enabled = trayActions(
           hasDevice: !busy && connectedDevices.contains(entry.key),
           running: current?.running ?? false,
-          starting: current?.starting ?? false);
+          starting: current?.starting ?? false,
+          debug: current?.mode == RunMode.debug);
       for (var i = 0; i < entry.value.length; i++) {
         entry.value[i].isEnabled = enabled[i];
       }
     }
-    final anyRunning = sessions.entries.any((e) => e.value.running);
+    final anyRunning = sessions.entries
+        .any((e) => e.value.running && e.value.mode == RunMode.debug);
     if (batchTrayItems.length == 3) {
       batchTrayItems[0].isEnabled = anyRunning;
       batchTrayItems[1].isEnabled = anyRunning;
@@ -221,6 +226,10 @@ class _HomeState extends State<Home> {
   }
 
   void refresh() {
+    final pid = device == null ? null : sessions[device!]?.processId;
+    if (tab == 'Logcat' && pid != logcatPid) {
+      unawaited(startLogcat());
+    }
     updateTray();
     if (mounted) {
       setState(() {
@@ -253,11 +262,7 @@ class _HomeState extends State<Home> {
   FlutterSdkResolution get sdkResolution =>
       resolveFlutterSdk(project.text, sdk.text);
   String get adb {
-    final root = Platform.environment['ANDROID_SDK_ROOT'] ??
-        Platform.environment['ANDROID_HOME'];
-    return root == null
-        ? 'adb'
-        : '$root${Platform.pathSeparator}platform-tools${Platform.pathSeparator}${Platform.isWindows ? 'adb.exe' : 'adb'}';
+    return resolveAdb(Platform.environment);
   }
 
   Future<ProcessResult> command(String executable, List<String> args) =>
@@ -351,6 +356,7 @@ class _HomeState extends State<Home> {
   Future<void> choose(TextEditingController controller) async {
     final path = await getDirectoryPath();
     if (path != null && !sessions.active) {
+      if (controller == project && controller.text != path) deviceLogs.clear();
       controller.text = path;
       await save();
       refresh();
@@ -377,7 +383,8 @@ class _HomeState extends State<Home> {
     if (targetSession.active) return;
     try {
       final launch = targetSession.start(
-          resolution.executable!, project.text.trim(), target);
+          resolution.executable!, project.text.trim(), target,
+          mode: runMode);
       await save();
       await launch;
       if (mounted && device == target && targetSession.starting) {
@@ -412,6 +419,7 @@ class _HomeState extends State<Home> {
     final target = device;
     logcat?.kill();
     logcat = null;
+    logcatPid = null;
     if (target == null) return;
     final selected = devices.where((d) => d['id'] == target).toList();
     if (selected.isEmpty ||
@@ -419,9 +427,16 @@ class _HomeState extends State<Home> {
       setState(() => status = 'Logcat 仅适用于 Android 设备');
       return;
     }
+    final pid = sessions[target]?.processId;
+    if (pid == null) {
+      setState(() => status = '等待当前应用启动后显示 Logcat');
+      return;
+    }
+    logcatPid = pid;
+    deviceLogs.remove(target);
     try {
       final process = await Process.start(
-          adb, ['-s', target, 'logcat', '-v', 'threadtime'],
+          adb, ['-s', target, 'logcat', '--pid=$pid', '-v', 'threadtime'],
           runInShell: Platform.isWindows);
       if (!mounted || generation != logcatGeneration || device != target) {
         process.kill();
@@ -455,12 +470,14 @@ class _HomeState extends State<Home> {
         if (mounted && identical(logcat, process)) {
           setState(() {
             logcat = null;
+            logcatPid = null;
             status = 'Logcat 已退出 ($code)';
           });
         }
       }));
     } catch (e) {
       if (mounted && generation == logcatGeneration) {
+        logcatPid = null;
         setState(() => status = '无法启动 adb：$e');
       }
     }
@@ -957,22 +974,20 @@ class _HomeState extends State<Home> {
                       child: Text('暂无日志',
                           style: TextStyle(
                               color: Color(0xffa1a8ae), fontSize: 12)))
-                  : ListView.builder(
-                      padding: const EdgeInsets.all(14),
-                      itemCount: logs.length,
-                      itemBuilder: (_, i) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: SelectableText(logs[i].text,
-                              style: TextStyle(
-                                  fontFamily: 'monospace',
-                                  fontFamilyFallback: const [
-                                    'Apple Color Emoji',
-                                    'Segoe UI Emoji',
-                                    'Noto Color Emoji'
-                                  ],
-                                  fontSize: 12,
-                                  height: 1.5,
-                                  color: logColor(logs[i].level)))))),
+                  : SelectionArea(
+                      child: ListView.builder(
+                          key: ValueKey('$tab-$device'),
+                          reverse: true,
+                          padding: const EdgeInsets.all(14),
+                          itemCount: logs.length,
+                          itemBuilder: (_, i) {
+                            final entry = logs[logs.length - 1 - i];
+                            return Text(entry.text,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    height: 1.5,
+                                    color: logColor(entry.level)));
+                          }))),
         ]),
       );
 
@@ -1056,36 +1071,63 @@ class _HomeState extends State<Home> {
                               style: const TextStyle(
                                   color: Color(0xff989fa5), fontSize: 11)),
                           const SizedBox(height: 15),
-                          Wrap(spacing: 7, runSpacing: 7, children: [
-                            actionButton(
-                                '运行',
-                                Icons.play_arrow_rounded,
-                                busy ||
-                                        device == null ||
-                                        !connectedDevices.contains(device) ||
-                                        session.active
-                                    ? null
-                                    : run,
-                                primary: true),
-                            actionButton(
-                                '热重载',
-                                Icons.bolt_rounded,
-                                session.running
-                                    ? () => session.restart(fullRestart: false)
-                                    : null),
-                            actionButton(
-                                '热重启',
-                                Icons.restart_alt_rounded,
-                                session.running
-                                    ? () => session.restart(fullRestart: true)
-                                    : null),
-                            actionButton(
-                                '停止',
-                                Icons.stop_rounded,
-                                session.running || session.starting
-                                    ? session.stop
-                                    : null),
-                          ]),
+                          Wrap(
+                              spacing: 7,
+                              runSpacing: 7,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Tooltip(
+                                    message: '运行模式',
+                                    child: DropdownButton<RunMode>(
+                                      value: runMode,
+                                      items: RunMode.values
+                                          .map((mode) => DropdownMenuItem(
+                                                value: mode,
+                                                child: Text(
+                                                    mode.name[0].toUpperCase() +
+                                                        mode.name.substring(1)),
+                                              ))
+                                          .toList(),
+                                      onChanged: (mode) {
+                                        if (mode != null) {
+                                          setState(() => runMode = mode);
+                                        }
+                                      },
+                                    )),
+                                actionButton(
+                                    '运行',
+                                    Icons.play_arrow_rounded,
+                                    busy ||
+                                            device == null ||
+                                            !connectedDevices
+                                                .contains(device) ||
+                                            session.active
+                                        ? null
+                                        : run,
+                                    primary: true),
+                                actionButton(
+                                    '热重载',
+                                    Icons.bolt_rounded,
+                                    session.running &&
+                                            session.mode == RunMode.debug
+                                        ? () =>
+                                            session.restart(fullRestart: false)
+                                        : null),
+                                actionButton(
+                                    '热重启',
+                                    Icons.restart_alt_rounded,
+                                    session.running &&
+                                            session.mode == RunMode.debug
+                                        ? () =>
+                                            session.restart(fullRestart: true)
+                                        : null),
+                                actionButton(
+                                    '停止',
+                                    Icons.stop_rounded,
+                                    session.running || session.starting
+                                        ? session.stop
+                                        : null),
+                              ]),
                         ])),
                 Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 28),

@@ -7,6 +7,14 @@ void main() {
   setUp(() => root = Directory.systemTemp.createTempSync('fvm-resolver'));
   tearDown(() => root.deleteSync(recursive: true));
 
+  test('falls back to a valid Android SDK when the first path is stale', () {
+    final tools = Directory('${root.path}/platform-tools')..createSync();
+    final adb = File('${tools.path}/${Platform.isWindows ? 'adb.exe' : 'adb'}')
+      ..writeAsStringSync('');
+    expect(resolveAdb({'ANDROID_SDK_ROOT': '${root.path}/missing', 'ANDROID_HOME': root.path}), adb.path);
+    expect(resolveAdb({'ANDROID_SDK_ROOT': '${root.path}/missing'}), 'adb');
+  });
+
   test('uses project FVM SDK instead of manual SDK', () {
     final project = Directory('${root.path}/project')..createSync();
     final sdk = Directory('${project.path}/.fvm/flutter_sdk/bin')

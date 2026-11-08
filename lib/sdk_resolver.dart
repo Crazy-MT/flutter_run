@@ -1,6 +1,15 @@
 import 'dart:convert';
 import 'dart:io';
 
+String resolveAdb(Map<String, String> environment) {
+  for (final root in [environment['ANDROID_SDK_ROOT'], environment['ANDROID_HOME']]) {
+    if (root == null || root.isEmpty) continue;
+    final path = '$root${Platform.pathSeparator}platform-tools${Platform.pathSeparator}${Platform.isWindows ? 'adb.exe' : 'adb'}';
+    if (File(path).existsSync()) return path;
+  }
+  return 'adb';
+}
+
 class FlutterSdkResolution {
   const FlutterSdkResolution(
       {required this.isFvm, this.sdkPath, this.executable, this.error});
