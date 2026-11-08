@@ -19,19 +19,65 @@ void main() {
   runApp(const RunnerApp(enableTray: true));
 }
 
-class RunnerApp extends StatelessWidget {
+class RunnerApp extends StatefulWidget {
   const RunnerApp({super.key, this.enableTray = false});
   final bool enableTray;
   @override
+  State<RunnerApp> createState() => _RunnerAppState();
+}
+
+class _RunnerAppState extends State<RunnerApp> {
+  ThemeMode themeMode = ThemeMode.system;
+  bool themeChanged = false;
+
+  @override
+  void initState() {
+    super.initState();
+    SharedPreferences.getInstance().then((prefs) {
+      if (!mounted || themeChanged) return;
+      final saved = prefs.getString('themeMode');
+      setState(() => themeMode =
+          ThemeMode.values.where((mode) => mode.name == saved).firstOrNull ??
+              ThemeMode.system);
+    });
+  }
+
+  void setThemeMode(ThemeMode mode) {
+    themeChanged = true;
+    setState(() => themeMode = mode);
+    SharedPreferences.getInstance()
+        .then((prefs) => prefs.setString('themeMode', mode.name));
+  }
+
+  @override
   Widget build(BuildContext context) => MaterialApp(
       title: 'Flutter Run',
-      theme: ThemeData(colorSchemeSeed: Colors.blue, useMaterial3: true),
-      home: Home(enableTray: enableTray));
+      theme: ThemeData(
+          brightness: Brightness.light,
+          colorSchemeSeed: const Color(0xff3578f6),
+          scaffoldBackgroundColor: const Color(0xfff5f7fb),
+          useMaterial3: true),
+      darkTheme: ThemeData(
+          brightness: Brightness.dark,
+          colorSchemeSeed: const Color(0xff69b4fc),
+          scaffoldBackgroundColor: const Color(0xff101722),
+          useMaterial3: true),
+      themeMode: themeMode,
+      home: Home(
+          enableTray: widget.enableTray,
+          themeMode: themeMode,
+          onThemeChanged: setThemeMode));
 }
 
 class Home extends StatefulWidget {
-  const Home({super.key, this.enableTray = false});
+  const Home(
+      {super.key,
+      this.enableTray = false,
+      required this.themeMode,
+      required this.onThemeChanged});
   final bool enableTray;
+  final ThemeMode themeMode;
+  final ValueChanged<ThemeMode> onThemeChanged;
   @override
   State<Home> createState() => _HomeState();
 }
@@ -534,6 +580,9 @@ class _HomeState extends State<Home> {
     if (value == 'Logcat' && logcat == null) unawaited(startLogcat());
   }
 
+  Color tone(int light, int dark) =>
+      Color(Theme.of(context).brightness == Brightness.dark ? dark : light);
+
   Future<void> showSettings() async {
     await showDialog<void>(
       context: context,
@@ -559,8 +608,8 @@ class _HomeState extends State<Home> {
                                     '使用项目 FVM：${resolution.sdkPath}（手动 SDK 保留用于其他项目）',
                                 style: TextStyle(
                                     color: resolution.error == null
-                                        ? const Color(0xff3977d7)
-                                        : const Color(0xffc6414c))),
+                                        ? tone(0xff3578f6, 0xff69b4fc)
+                                        : tone(0xffc6414c, 0xffff858b))),
                           );
                         },
                       ),
@@ -584,57 +633,23 @@ class _HomeState extends State<Home> {
   }
 
   Color logColor(LogLevel level) => switch (level) {
-        LogLevel.verbose => const Color(0xff89919d),
-        LogLevel.debug => const Color(0xff526f98),
-        LogLevel.info => const Color(0xff29826b),
-        LogLevel.warning => const Color(0xffa77116),
-        LogLevel.error => const Color(0xffc6414c),
-        LogLevel.normal => const Color(0xff414a56),
+        LogLevel.verbose => tone(0xff718095, 0xff8191a6),
+        LogLevel.debug => tone(0xff526f98, 0xff83bafa),
+        LogLevel.info => tone(0xff198969, 0xff65d7ad),
+        LogLevel.warning => tone(0xffa77116, 0xfff0bd6e),
+        LogLevel.error => tone(0xffc6414c, 0xffff858b),
+        LogLevel.normal => tone(0xff414a56, 0xffc3d0df),
       };
-
-  Widget sidebarNav(IconData icon, String label, String value) {
-    final selected = tab == value;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Material(
-        color: selected ? const Color(0xffdce8fa) : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(8),
-          onTap: () => setTab(value),
-          child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-              child: Row(children: [
-                Icon(icon,
-                    size: 17,
-                    color: selected
-                        ? const Color(0xff3977d7)
-                        : const Color(0xff848b93)),
-                const SizedBox(width: 10),
-                Expanded(
-                    child: Text(label,
-                        style: TextStyle(
-                            fontSize: 12,
-                            fontWeight:
-                                selected ? FontWeight.w700 : FontWeight.w500,
-                            color: selected
-                                ? const Color(0xff3977d7)
-                                : const Color(0xff686f77)))),
-              ])),
-        ),
-      ),
-    );
-  }
 
   Widget sectionTitle(String text, {Widget? trailing}) => Padding(
         padding: const EdgeInsets.fromLTRB(9, 18, 2, 8),
         child: Row(children: [
           Expanded(
               child: Text(text,
-                  style: const TextStyle(
+                  style: TextStyle(
                       fontSize: 10,
                       letterSpacing: 1,
-                      color: Color(0xff8d949b),
+                      color: tone(0xff718095, 0xff8191a6),
                       fontWeight: FontWeight.w700))),
           if (trailing != null) trailing
         ]),
@@ -655,7 +670,7 @@ class _HomeState extends State<Home> {
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 2),
         child: Material(
-          color: isSelected ? const Color(0xffdce8fa) : Colors.transparent,
+          color: isSelected ? tone(0xffedf4ff, 0xff263b50) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
           child: InkWell(
             borderRadius: BorderRadius.circular(8),
@@ -670,8 +685,8 @@ class _HomeState extends State<Home> {
                           : Icons.laptop_mac_rounded,
                       size: 19,
                       color: isSelected
-                          ? const Color(0xff3977d7)
-                          : const Color(0xff8a9299)),
+                          ? tone(0xff3578f6, 0xff69b4fc)
+                          : tone(0xff718095, 0xff8191a6)),
                   const SizedBox(width: 9),
                   Expanded(
                       child: Column(
@@ -683,8 +698,9 @@ class _HomeState extends State<Home> {
                                 fontSize: 12, fontWeight: FontWeight.w600)),
                         const SizedBox(height: 3),
                         Text(subtitle,
-                            style: const TextStyle(
-                                fontSize: 10, color: Color(0xff92999f))),
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: tone(0xff718095, 0xff8191a6))),
                       ])),
                   Container(
                       width: 7,
@@ -693,7 +709,7 @@ class _HomeState extends State<Home> {
                           shape: BoxShape.circle,
                           color: active
                               ? const Color(0xff32ae80)
-                              : const Color(0xffbdc3c8))),
+                              : tone(0xffaab5c2, 0xff627184))),
                 ])),
           ),
         ));
@@ -708,19 +724,35 @@ class _HomeState extends State<Home> {
         '选择项目';
     return Container(
         width: 212,
-        color: const Color(0xffebebe9),
+        color: tone(0xffffffff, 0xff151f2c),
         child:
             Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
           Padding(
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 4),
               child: Row(children: [
-                const Icon(Icons.flutter_dash,
-                    color: Color(0xff3977d7), size: 21),
+                Icon(Icons.flutter_dash,
+                    color: tone(0xff3578f6, 0xff69b4fc), size: 21),
                 const SizedBox(width: 8),
                 const Expanded(
                     child: Text('Flutter Run',
                         style: TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w800))),
+                PopupMenuButton<ThemeMode>(
+                    tooltip: '切换外观',
+                    iconSize: 18,
+                    icon: const Icon(Icons.brightness_6_outlined),
+                    onSelected: widget.onThemeChanged,
+                    itemBuilder: (_) => [
+                          for (final (mode, label) in [
+                            (ThemeMode.system, '跟随系统'),
+                            (ThemeMode.light, '浅色模式'),
+                            (ThemeMode.dark, '深色模式'),
+                          ])
+                            CheckedPopupMenuItem(
+                                value: mode,
+                                checked: widget.themeMode == mode,
+                                child: Text(label)),
+                        ]),
                 IconButton(
                     tooltip: '项目与 SDK 设置',
                     iconSize: 18,
@@ -734,7 +766,7 @@ class _HomeState extends State<Home> {
                   children: [
                 sectionTitle('当前项目'),
                 Material(
-                    color: Colors.white.withValues(alpha: .65),
+                    color: tone(0xffffffff, 0xff1b2736),
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                         onTap: showSettings,
@@ -746,10 +778,11 @@ class _HomeState extends State<Home> {
                                   width: 32,
                                   height: 32,
                                   decoration: BoxDecoration(
-                                      color: const Color(0xffe5effd),
+                                      color: tone(0xffedf4ff, 0xff263b50),
                                       borderRadius: BorderRadius.circular(8)),
-                                  child: const Icon(Icons.folder_outlined,
-                                      size: 18, color: Color(0xff3977d7))),
+                                  child: Icon(Icons.folder_outlined,
+                                      size: 18,
+                                      color: tone(0xff3578f6, 0xff69b4fc))),
                               const SizedBox(width: 9),
                               Expanded(
                                   child: Column(
@@ -769,16 +802,12 @@ class _HomeState extends State<Home> {
                                             : project.text,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             fontSize: 10,
-                                            color: Color(0xff999fa5)))
+                                            color:
+                                                tone(0xff718095, 0xff8191a6)))
                                   ])),
                             ])))),
-                sectionTitle('工作空间'),
-                sidebarNav(Icons.article_outlined, '运行与调试', '运行日志'),
-                sidebarNav(Icons.account_tree_outlined, 'Flutter Inspector',
-                    'Inspector'),
-                sidebarNav(Icons.terminal_rounded, 'Logcat', 'Logcat'),
                 sectionTitle('设备',
                     trailing: IconButton(
                         tooltip: '刷新设备',
@@ -787,11 +816,12 @@ class _HomeState extends State<Home> {
                         onPressed: busy ? null : discover,
                         icon: const Icon(Icons.refresh_rounded))),
                 if (devices.isEmpty)
-                  const Padding(
-                      padding: EdgeInsets.all(9),
+                  Padding(
+                      padding: const EdgeInsets.all(9),
                       child: Text('暂无可用设备',
                           style: TextStyle(
-                              fontSize: 11, color: Color(0xff92999f)))),
+                              fontSize: 11,
+                              color: tone(0xff718095, 0xff8191a6)))),
                 ...devices.map(deviceRow),
                 PopupMenuButton<String>(
                   tooltip: '启动模拟器',
@@ -828,21 +858,24 @@ class _HomeState extends State<Home> {
                       margin: const EdgeInsets.only(top: 8),
                       padding: const EdgeInsets.symmetric(vertical: 10),
                       decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xffd4d7d8)),
+                          border:
+                              Border.all(color: tone(0xffdce3ec, 0xff344457)),
                           borderRadius: BorderRadius.circular(8)),
-                      child: const Center(
+                      child: Center(
                           child: Text('＋  启动模拟器',
                               style: TextStyle(
-                                  fontSize: 11, color: Color(0xff7e878e))))),
+                                  fontSize: 11,
+                                  color: tone(0xff647184, 0xffa8b8c8))))),
                 ),
               ])),
           InkWell(
               onTap: showSettings,
               child: Container(
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
-                  decoration: const BoxDecoration(
-                      border:
-                          Border(top: BorderSide(color: Color(0xffd9dcdd)))),
+                  decoration: BoxDecoration(
+                      border: Border(
+                          top:
+                              BorderSide(color: tone(0xffe9edf3, 0xff2b394a)))),
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -866,8 +899,9 @@ class _HomeState extends State<Home> {
                                 : (sdk.text.isEmpty ? '点击配置' : sdk.text),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                                fontSize: 10, color: Color(0xff92999f))),
+                            style: TextStyle(
+                                fontSize: 10,
+                                color: tone(0xff718095, 0xff8191a6))),
                       ]))),
         ]));
   }
@@ -876,15 +910,15 @@ class _HomeState extends State<Home> {
       {bool primary = false}) {
     final style = primary
         ? FilledButton.styleFrom(
-            backgroundColor: const Color(0xff343a46),
-            foregroundColor: Colors.white,
+            backgroundColor: tone(0xff3578f6, 0xff69b4fc),
+            foregroundColor: tone(0xffffffff, 0xff102439),
             padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 12),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)))
         : OutlinedButton.styleFrom(
-            foregroundColor: const Color(0xff454e59),
+            foregroundColor: tone(0xff17263c, 0xffd3deeb),
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-            side: const BorderSide(color: Color(0xffd8dcdf)),
+            side: BorderSide(color: tone(0xffdce3ec, 0xff344457)),
             shape:
                 RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)));
     return primary
@@ -902,7 +936,8 @@ class _HomeState extends State<Home> {
 
   Widget logPanel(List<LogEntry> logs) => Container(
         decoration: BoxDecoration(
-            color: Colors.white,
+            color: tone(0xffffffff, 0xff1b2736),
+            border: Border.all(color: tone(0xffe9edf3, 0xff2b394a)),
             borderRadius: BorderRadius.circular(12),
             boxShadow: const [
               BoxShadow(
@@ -918,8 +953,9 @@ class _HomeState extends State<Home> {
                     style: const TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w700)),
                 const SizedBox(width: 10),
-                const Text('实时输出',
-                    style: TextStyle(fontSize: 11, color: Color(0xffa0a6ad))),
+                Text('实时输出',
+                    style: TextStyle(
+                        fontSize: 11, color: tone(0xff198969, 0xff65d7ad))),
                 const Spacer(),
                 if (tab == 'Logcat')
                   TextButton(
@@ -935,7 +971,7 @@ class _HomeState extends State<Home> {
                         }),
                     child: const Text('清空')),
               ])),
-          const Divider(height: 1, color: Color(0xffeeefef)),
+          Divider(height: 1, color: tone(0xffe9edf3, 0xff2b394a)),
           Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
               child: Row(children: [
@@ -948,7 +984,7 @@ class _HomeState extends State<Home> {
                             hintText: '搜索日志',
                             prefixIcon: const Icon(Icons.search, size: 18),
                             filled: true,
-                            fillColor: const Color(0xfff6f7f7),
+                            fillColor: tone(0xfff5f7fb, 0xff111b27),
                             border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(7),
                                 borderSide: BorderSide.none)))),
@@ -967,13 +1003,14 @@ class _HomeState extends State<Home> {
                       onChanged: (v) => setState(() => priority = v!))
                 ],
               ])),
-          const Divider(height: 1, color: Color(0xffeeefef)),
+          Divider(height: 1, color: tone(0xffe9edf3, 0xff2b394a)),
           Expanded(
               child: logs.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text('暂无日志',
                           style: TextStyle(
-                              color: Color(0xffa1a8ae), fontSize: 12)))
+                              color: tone(0xff718095, 0xff8191a6),
+                              fontSize: 12)))
                   : SelectionArea(
                       child: ListView.builder(
                           key: ValueKey('$tab-$device'),
@@ -985,6 +1022,7 @@ class _HomeState extends State<Home> {
                             return Text(entry.text,
                                 style: TextStyle(
                                     fontSize: 12,
+                                    fontFamily: 'monospace',
                                     height: 1.5,
                                     color: logColor(entry.level)));
                           }))),
@@ -1010,7 +1048,7 @@ class _HomeState extends State<Home> {
             ? '启动中'
             : '未运行';
     return Scaffold(
-        backgroundColor: const Color(0xfff2f2f0),
+        backgroundColor: tone(0xfff5f7fb, 0xff101722),
         body: SafeArea(
             child: Row(children: [
           buildSidebar(),
@@ -1023,9 +1061,9 @@ class _HomeState extends State<Home> {
                     child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text('运行会话',
+                          Text('运行会话',
                               style: TextStyle(
-                                  color: Color(0xff9ba1a7),
+                                  color: tone(0xff718095, 0xff8191a6),
                                   fontSize: 10,
                                   letterSpacing: 1,
                                   fontWeight: FontWeight.w700)),
@@ -1045,16 +1083,17 @@ class _HomeState extends State<Home> {
                                         horizontal: 8, vertical: 5),
                                     decoration: BoxDecoration(
                                         color: session.running
-                                            ? const Color(0xffe2f2e9)
-                                            : const Color(0xffe4e6e6),
+                                            ? tone(0xffdcf5e9, 0xff203d39)
+                                            : tone(0xffe9edf3, 0xff2b394a),
                                         borderRadius: BorderRadius.circular(6)),
                                     child: Text('● $state',
                                         style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w700,
                                             color: session.running
-                                                ? const Color(0xff26865f)
-                                                : const Color(0xff868f96)))),
+                                                ? tone(0xff23845f, 0xff76dbb5)
+                                                : tone(
+                                                    0xff647184, 0xffa8b8c8)))),
                               ]),
                           const SizedBox(height: 5),
                           Text(
@@ -1068,8 +1107,9 @@ class _HomeState extends State<Home> {
                               ].join('  ·  '),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: Color(0xff989fa5), fontSize: 11)),
+                              style: TextStyle(
+                                  color: tone(0xff718095, 0xff8191a6),
+                                  fontSize: 11)),
                           const SizedBox(height: 15),
                           Wrap(
                               spacing: 7,
@@ -1143,8 +1183,9 @@ class _HomeState extends State<Home> {
                                     labelStyle: const TextStyle(
                                         fontSize: 11,
                                         fontWeight: FontWeight.w600),
-                                    selectedColor: Colors.white,
-                                    backgroundColor: const Color(0xffe4e5e3),
+                                    selectedColor: tone(0xffedf4ff, 0xff263b50),
+                                    backgroundColor:
+                                        tone(0xffffffff, 0xff1b2736),
                                     side: BorderSide.none,
                                     shape: RoundedRectangleBorder(
                                         borderRadius: BorderRadius.circular(8)),
@@ -1157,13 +1198,14 @@ class _HomeState extends State<Home> {
                             ? (session.devToolsUri == null
                                 ? Container(
                                     decoration: BoxDecoration(
-                                        color: Colors.white,
+                                        color: tone(0xffffffff, 0xff1b2736),
                                         borderRadius:
                                             BorderRadius.circular(12)),
-                                    child: const Center(
+                                    child: Center(
                                         child: Text('运行应用后连接 Flutter Inspector',
                                             style: TextStyle(
-                                                color: Color(0xff949ca4)))))
+                                                color: tone(
+                                                    0xff718095, 0xff8191a6)))))
                                 : ClipRRect(
                                     borderRadius: BorderRadius.circular(12),
                                     child: InspectorView(
@@ -1179,8 +1221,9 @@ class _HomeState extends State<Home> {
                       Expanded(
                           child: Text(
                               'Flutter SDK  ·  ${sessions.entries.where((e) => e.value.running).length} 个设备运行中',
-                              style: const TextStyle(
-                                  fontSize: 10, color: Color(0xff949ca4))))
+                              style: TextStyle(
+                                  fontSize: 10,
+                                  color: tone(0xff718095, 0xff8191a6))))
                     ])),
               ])),
         ])));

@@ -18,7 +18,42 @@ void main() {
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(find.text('热重载'), findsOneWidget);
-    expect(find.text('Logcat'), findsNWidgets(2));
+    expect(find.text('Logcat'), findsOneWidget);
+    expect(find.text('工作空间'), findsNothing);
+  });
+  testWidgets('follows system light and dark appearance', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.pumpWidget(const RunnerApp());
+    expect(Theme.of(tester.element(find.text('当前项目'))).brightness,
+        Brightness.light);
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+    expect(Theme.of(tester.element(find.text('当前项目'))).brightness,
+        Brightness.dark);
+  });
+  testWidgets('saves and restores selected appearance', (tester) async {
+    SharedPreferences.setMockInitialValues({});
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.light;
+    addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
+    await tester.pumpWidget(const RunnerApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('切换外观'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.ancestor(
+        of: find.text('深色模式'),
+        matching: find.byType(CheckedPopupMenuItem<ThemeMode>)));
+    await tester.pumpAndSettle();
+    expect(Theme.of(tester.element(find.text('当前项目'))).brightness,
+        Brightness.dark);
+    expect(
+        (await SharedPreferences.getInstance()).getString('themeMode'), 'dark');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(const RunnerApp());
+    await tester.pumpAndSettle();
+    expect(Theme.of(tester.element(find.text('当前项目'))).brightness,
+        Brightness.dark);
   });
   testWidgets('saving a typed SDK discovers devices', (tester) async {
     if (Platform.isWindows) return;

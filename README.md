@@ -14,9 +14,9 @@ Flutter 桌面运行工具，面向 macOS、Windows 和 Linux。选择本地 Flu
 
 ![Android Logcat 界面](docs/screenshots/02-logcat.png)
 
-### 项目与 Flutter SDK
+### 项目与 Flutter SDK 设置
 
-![项目与 FVM SDK 设置](docs/screenshots/03-fvm-settings.png)
+![项目与 Flutter SDK 设置](docs/screenshots/03-fvm-settings.png)
 
 ## 开发运行
 
@@ -34,6 +34,6 @@ fvm flutter run -d macos   # Windows: -d windows；Linux: -d linux
 
 选择设备并运行后，可切换到其他设备再次运行同一个项目；每台设备的会话、Inspector 和日志分别管理。活动会话存在时，SDK 和项目目录锁定。点击系统状态栏图标后，菜单顶部直接提供当前设备的运行、热重载、热重启和停止；菜单下方可按设备操作，也支持对全部运行中的设备批量操作。关闭应用后状态栏图标也会退出。Linux 桌面需要支持 StatusNotifierItem 的系统托盘；GNOME 可能需要 AppIndicator 扩展。Linux 构建状态栏依赖 GTK 3、X11 和 Xi 开发包。
 
-运行日志按明确的等级前缀和 Flutter 错误标记着色；没有等级信息的内容以中性色显示。日志保留原始文本与 emoji。点击左上角设置可选择项目和 Flutter SDK。
+运行日志按明确的等级前缀和 Flutter 错误标记着色；没有等级信息的内容以中性色显示。日志保留原始文本与 emoji。点击左上角设置可选择项目和 Flutter SDK；旁边的外观菜单可选择跟随系统、浅色或深色模式。
 
 选择项目后，如果项目包含 `.fvm` 或 `.fvmrc`，设备发现、模拟器启动和应用运行自动使用项目的 `.fvm/flutter_sdk`。手动 SDK 设置保留给没有 FVM 的项目；若项目 SDK 缺失或版本记录不一致，界面会提示在项目目录执行 `fvm install`。
