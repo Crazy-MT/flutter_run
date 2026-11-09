@@ -63,7 +63,7 @@ class RunSession extends ChangeNotifier {
       process.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .listen((line) => _log(line));
+          .listen((line) => _log(line, isError: true));
       unawaited(process.exitCode.then((code) {
         if (identical(_process, process)) {
           _process = null;

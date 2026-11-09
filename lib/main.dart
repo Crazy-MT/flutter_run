@@ -109,6 +109,8 @@ class _HomeState extends State<Home> {
   List<String> get androidLogs =>
       deviceLogs.putIfAbsent(device ?? '', () => []);
   bool paused = false, busy = false;
+  bool showLogSearch = false;
+  bool errorsOnly = false;
   int discoveryGeneration = 0;
   String status = '选择 Flutter SDK 和项目目录';
   @override
@@ -961,6 +963,12 @@ class _HomeState extends State<Home> {
                   TextButton(
                       onPressed: () => setState(() => paused = !paused),
                       child: Text(paused ? '继续' : '暂停')),
+                if (tab == '运行日志')
+                  FilterChip(
+                      label: const Text('仅错误'),
+                      selected: errorsOnly,
+                      onSelected: (value) =>
+                          setState(() => errorsOnly = value)),
                 TextButton(
                     onPressed: () => setState(() {
                           if (tab == 'Logcat') {
@@ -970,39 +978,50 @@ class _HomeState extends State<Home> {
                           }
                         }),
                     child: const Text('清空')),
+                IconButton(
+                    tooltip: showLogSearch ? '收起搜索' : '搜索日志',
+                    onPressed: () => setState(() {
+                          showLogSearch = !showLogSearch;
+                          if (!showLogSearch) filter.clear();
+                        }),
+                    icon: Icon(showLogSearch ? Icons.close : Icons.search)),
               ])),
-          Divider(height: 1, color: tone(0xffe9edf3, 0xff2b394a)),
-          Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              child: Row(children: [
-                Expanded(
-                    child: TextField(
-                        controller: filter,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                            isDense: true,
-                            hintText: '搜索日志',
-                            prefixIcon: const Icon(Icons.search, size: 18),
-                            filled: true,
-                            fillColor: tone(0xfff5f7fb, 0xff111b27),
-                            border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(7),
-                                borderSide: BorderSide.none)))),
-                if (tab == 'Logcat') ...[
-                  const SizedBox(width: 12),
-                  DropdownButton<String>(
-                      value: priority,
-                      underline: const SizedBox.shrink(),
-                      items: 'VDIWEF'
-                          .split('')
-                          .map((v) => DropdownMenuItem(
-                              value: v,
-                              child: Text(v,
-                                  style: const TextStyle(fontSize: 12))))
-                          .toList(),
-                      onChanged: (v) => setState(() => priority = v!))
-                ],
-              ])),
+          if (showLogSearch || tab == 'Logcat') ...[
+            Divider(height: 1, color: tone(0xffe9edf3, 0xff2b394a)),
+            Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Row(children: [
+                  if (showLogSearch)
+                    Expanded(
+                        child: TextField(
+                            controller: filter,
+                            onChanged: (_) => setState(() {}),
+                            decoration: InputDecoration(
+                                isDense: true,
+                                hintText: '搜索日志',
+                                prefixIcon: const Icon(Icons.search, size: 18),
+                                filled: true,
+                                fillColor: tone(0xfff5f7fb, 0xff111b27),
+                                border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(7),
+                                    borderSide: BorderSide.none)))),
+                  if (tab == 'Logcat') ...[
+                    if (showLogSearch) const SizedBox(width: 12),
+                    DropdownButton<String>(
+                        value: priority,
+                        underline: const SizedBox.shrink(),
+                        items: 'VDIWEF'
+                            .split('')
+                            .map((v) => DropdownMenuItem(
+                                value: v,
+                                child: Text(v,
+                                    style: const TextStyle(fontSize: 12))))
+                            .toList(),
+                        onChanged: (v) => setState(() => priority = v!))
+                  ],
+                ])),
+          ],
           Divider(height: 1, color: tone(0xffe9edf3, 0xff2b394a)),
           Expanded(
               child: logs.isEmpty
@@ -1038,6 +1057,7 @@ class _HomeState extends State<Home> {
             .toList()
         : session.logs
             .where((entry) =>
+                (!errorsOnly || entry.level == LogLevel.error) &&
                 entry.text.toLowerCase().contains(filter.text.toLowerCase()))
             .toList();
     final selected = devices.where((d) => d['id'] == device).firstOrNull;
