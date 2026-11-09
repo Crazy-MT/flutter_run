@@ -2,9 +2,13 @@ import 'dart:convert';
 import 'dart:io';
 
 String resolveAdb(Map<String, String> environment) {
-  for (final root in [environment['ANDROID_SDK_ROOT'], environment['ANDROID_HOME']]) {
+  for (final root in [
+    environment['ANDROID_SDK_ROOT'],
+    environment['ANDROID_HOME']
+  ]) {
     if (root == null || root.isEmpty) continue;
-    final path = '$root${Platform.pathSeparator}platform-tools${Platform.pathSeparator}${Platform.isWindows ? 'adb.exe' : 'adb'}';
+    final path =
+        '$root${Platform.pathSeparator}platform-tools${Platform.pathSeparator}${Platform.isWindows ? 'adb.exe' : 'adb'}';
     if (File(path).existsSync()) return path;
   }
   return 'adb';
@@ -19,8 +23,8 @@ class FlutterSdkResolution {
   final String? error;
 }
 
-FlutterSdkResolution resolveFlutterSdk(
-    String projectPath, String manualSdkPath) {
+FlutterSdkResolution resolveFlutterSdk(String projectPath, String manualSdkPath,
+    {Map<String, String>? environment}) {
   final project = projectPath.trim();
   final separator = Platform.pathSeparator;
   final executableName = Platform.isWindows ? 'flutter.bat' : 'flutter';
@@ -68,6 +72,18 @@ FlutterSdkResolution resolveFlutterSdk(
       }
       return FlutterSdkResolution(
           isFvm: true, sdkPath: sdk, executable: executable);
+    }
+  }
+  final env = environment ?? Platform.environment;
+  final pathValue = env['PATH'] ?? env['Path'] ?? '';
+  for (final directory in pathValue.split(Platform.isWindows ? ';' : ':')) {
+    if (directory.isEmpty) continue;
+    final executable = '$directory$separator$executableName';
+    if (File(executable).existsSync()) {
+      return FlutterSdkResolution(
+          isFvm: false,
+          sdkPath: Directory(directory).parent.path,
+          executable: executable);
     }
   }
   final manual = manualSdkPath.trim();

@@ -11,7 +11,12 @@ void main() {
     final tools = Directory('${root.path}/platform-tools')..createSync();
     final adb = File('${tools.path}/${Platform.isWindows ? 'adb.exe' : 'adb'}')
       ..writeAsStringSync('');
-    expect(resolveAdb({'ANDROID_SDK_ROOT': '${root.path}/missing', 'ANDROID_HOME': root.path}), adb.path);
+    expect(
+        resolveAdb({
+          'ANDROID_SDK_ROOT': '${root.path}/missing',
+          'ANDROID_HOME': root.path
+        }),
+        adb.path);
     expect(resolveAdb({'ANDROID_SDK_ROOT': '${root.path}/missing'}), 'adb');
   });
 
@@ -37,7 +42,20 @@ void main() {
     expect(result.error, contains('fvm install'));
   });
 
-  test('uses manual SDK for a project without FVM', () {
+  test('uses machine Flutter from PATH for a project without FVM', () {
+    final bin = Directory('${root.path}/flutter/bin')
+      ..createSync(recursive: true);
+    final executable =
+        File('${bin.path}/${Platform.isWindows ? 'flutter.bat' : 'flutter'}')
+          ..writeAsStringSync('');
+    final result = resolveFlutterSdk(root.path, '/manual/sdk',
+        environment: {'PATH': bin.path});
+    expect(result.isFvm, false);
+    expect(result.executable, executable.path);
+    expect(result.sdkPath, Directory(bin.path).parent.path);
+  });
+
+  test('falls back to manual SDK when PATH has no Flutter', () {
     final result = resolveFlutterSdk(root.path, '/manual/sdk');
     expect(result.isFvm, false);
     expect(result.executable,

@@ -112,7 +112,7 @@ class _HomeState extends State<Home> {
   bool showLogSearch = false;
   bool errorsOnly = false;
   int discoveryGeneration = 0;
-  String status = '选择 Flutter SDK 和项目目录';
+  String status = '选择项目目录';
   @override
   void initState() {
     super.initState();
@@ -295,6 +295,11 @@ class _HomeState extends State<Home> {
     final p = await SharedPreferences.getInstance();
     sdk.text = p.getString('sdk') ?? '';
     project.text = p.getString('project') ?? '';
+    if (project.text.isNotEmpty &&
+        !sdkResolution.isFvm &&
+        sdkResolution.error == null) {
+      sdk.text = sdkResolution.sdkPath!;
+    }
     if (sdkResolution.executable != null || sdkResolution.isFvm) {
       await discover();
     }
@@ -406,6 +411,14 @@ class _HomeState extends State<Home> {
     if (path != null && !sessions.active) {
       if (controller == project && controller.text != path) deviceLogs.clear();
       controller.text = path;
+      if (controller == project && path.isNotEmpty) {
+        final resolution = resolveFlutterSdk(path, '');
+        if (resolution.executable != null && !resolution.isFvm) {
+          sdk.text = resolution.sdkPath!;
+        } else if (resolution.isFvm) {
+          sdk.clear();
+        }
+      }
       await save();
       refresh();
     }
@@ -567,15 +580,18 @@ class _HomeState extends State<Home> {
                     discover();
                   }
                 })),
-        const SizedBox(width: 8),
-        OutlinedButton(
-            onPressed: sessions.active
-                ? null
-                : () async {
-                    await choose(controller);
-                    if (devicesAfter) await discover();
-                  },
-            child: const Text('选择'))
+        if (controller != sdk ||
+            (sdkResolution.executable == null && !sdkResolution.isFvm)) ...[
+          const SizedBox(width: 8),
+          OutlinedButton(
+              onPressed: sessions.active
+                  ? null
+                  : () async {
+                      await choose(controller);
+                      if (devicesAfter) await discover();
+                    },
+              child: const Text('选择'))
+        ]
       ]);
   void setTab(String value) {
     setState(() => tab = value);
@@ -595,19 +611,25 @@ class _HomeState extends State<Home> {
                 content: SizedBox(
                     width: 620,
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      pathRow('Flutter SDK', sdk, devicesAfter: true),
-                      const SizedBox(height: 14),
+                      if (sdkResolution.executable == null &&
+                          !sdkResolution.isFvm) ...[
+                        pathRow('Flutter SDK', sdk, devicesAfter: true),
+                        const SizedBox(height: 14),
+                      ],
                       pathRow('项目目录', project),
                       ValueListenableBuilder<TextEditingValue>(
                         valueListenable: project,
                         builder: (_, __, ___) {
                           final resolution = sdkResolution;
-                          if (!resolution.isFvm) return const SizedBox.shrink();
+                          if (resolution.sdkPath == null)
+                            return const SizedBox.shrink();
                           return Padding(
                             padding: const EdgeInsets.only(top: 12),
                             child: Text(
                                 resolution.error ??
-                                    '使用项目 FVM：${resolution.sdkPath}（手动 SDK 保留用于其他项目）',
+                                    (resolution.isFvm
+                                        ? '使用项目 FVM：${resolution.sdkPath}'
+                                        : '自动检测 Flutter SDK：${resolution.sdkPath}'),
                                 style: TextStyle(
                                     color: resolution.error == null
                                         ? tone(0xff3578f6, 0xff69b4fc)
@@ -898,7 +920,9 @@ class _HomeState extends State<Home> {
                                 ? (sdkResolution.error == null
                                     ? 'FVM · ${sdkResolution.sdkPath}'
                                     : 'FVM 配置异常 · 点击查看')
-                                : (sdk.text.isEmpty ? '点击配置' : sdk.text),
+                                : (sdkResolution.executable != null
+                                    ? sdkResolution.sdkPath!
+                                    : '点击配置'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
