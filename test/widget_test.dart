@@ -12,9 +12,29 @@ void main() {
     await tester.pump();
     expect(find.text('Flutter SDK'), findsOneWidget);
     expect(find.text('当前项目'), findsOneWidget);
-    await tester.tap(find.byTooltip('项目与 SDK 设置'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     expect(find.text('项目目录'), findsOneWidget);
+    final toggle = find.bySemanticsLabel('专注模式');
+    final system = find.text('跟随系统');
+    final done = find.text('完成');
+    final toggleCenter = tester.getCenter(toggle);
+    final dialog = find.byType(AlertDialog);
+    final projectField = find
+        .descendant(
+          of: dialog,
+          matching: find.byType(TextField),
+        )
+        .last;
+    final systemChip = find.widgetWithText(FilterChip, '跟随系统');
+    expect(tester.getTopLeft(systemChip).dx,
+        closeTo(tester.getTopLeft(projectField).dx, 1));
+    expect(tester.getCenter(system).dy, closeTo(toggleCenter.dy, 1));
+    expect(tester.getCenter(find.text('深色模式')).dx,
+        lessThan(tester.getCenter(system).dx));
+    expect(tester.getCenter(system).dx, lessThan(toggleCenter.dx));
+    expect(tester.getCenter(done).dy, greaterThan(toggleCenter.dy));
     await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(find.text('热重载'), findsOneWidget);
@@ -39,11 +59,12 @@ void main() {
     addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
     await tester.pumpWidget(const RunnerApp());
     await tester.pumpAndSettle();
-    await tester.tap(find.byTooltip('切换外观'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.ancestor(
-        of: find.text('深色模式'),
-        matching: find.byType(CheckedPopupMenuItem<ThemeMode>)));
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.bySemanticsLabel('专注模式'));
+    await tester.pump();
+    await tester.tap(find.text('完成'));
     await tester.pumpAndSettle();
     expect(Theme.of(tester.element(find.text('当前项目'))).brightness,
         Brightness.dark);
@@ -54,6 +75,34 @@ void main() {
     await tester.pumpAndSettle();
     expect(Theme.of(tester.element(find.text('当前项目'))).brightness,
         Brightness.dark);
+
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
+    await tester.tap(find.bySemanticsLabel('专注模式'));
+    await tester.pump();
+    expect((await SharedPreferences.getInstance()).getString('themeMode'),
+        'light');
+    await tester.tap(find.text('跟随系统'));
+    await tester.pumpAndSettle();
+    expect((await SharedPreferences.getInstance()).getString('themeMode'),
+        'system');
+    final chip = find.widgetWithText(FilterChip, '跟随系统');
+    expect(tester.widget<FilterChip>(chip).selected, isTrue);
+    expect(find.text('完成'), findsOneWidget);
+
+    tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
+    await tester.pumpAndSettle();
+    final control = find.bySemanticsLabel('专注模式');
+    expect(tester.widget<Semantics>(control).properties.toggled, isTrue);
+    expect(tester.widget<FilterChip>(chip).selected, isTrue);
+
+    await tester.tap(control);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilterChip>(chip).selected, isFalse);
+    expect(tester.widget<Semantics>(control).properties.toggled, isFalse);
+    expect((await SharedPreferences.getInstance()).getString('themeMode'),
+        'light');
   });
   testWidgets('saving a typed SDK discovers devices', (tester) async {
     if (Platform.isWindows) return;
@@ -67,8 +116,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const RunnerApp());
     await tester.pump();
-    await tester.tap(find.byTooltip('项目与 SDK 设置'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     final fields = find.descendant(
         of: find.byType(AlertDialog), matching: find.byType(TextField));
     await tester.enterText(fields.first, dir.path);
@@ -110,8 +160,9 @@ fi
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const RunnerApp());
     await tester.pump();
-    await tester.tap(find.byTooltip('项目与 SDK 设置'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     final fields = find.descendant(
         of: find.byType(AlertDialog), matching: find.byType(TextField));
     await tester.enterText(fields.last, dir.path);
@@ -174,8 +225,9 @@ fi
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(const RunnerApp());
     await tester.pump();
-    await tester.tap(find.byTooltip('项目与 SDK 设置'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     final manualFields = find.descendant(
         of: find.byType(AlertDialog), matching: find.byType(TextField));
     await tester.enterText(manualFields.first, '${root.path}/manual');
@@ -189,8 +241,9 @@ fi
       await tester.pump();
     }
     expect(find.text('Manual device'), findsWidgets);
-    await tester.tap(find.byTooltip('项目与 SDK 设置'));
-    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('设置'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 250));
     final fields = find.descendant(
         of: find.byType(AlertDialog), matching: find.byType(TextField));
     await tester.enterText(fields.last, project.path);

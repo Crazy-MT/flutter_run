@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'dart:ui' show AppExitResponse;
 import 'package:webview_all/webview_all.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'focus_mode_switch.dart';
 import 'log_filter.dart';
 import 'log_entry.dart';
 import 'session.dart';
@@ -564,10 +565,12 @@ class _HomeState extends State<Home> {
     super.dispose();
   }
 
+  static const double settingsLabelWidth = 95;
+
   Widget pathRow(String name, TextEditingController controller,
           {bool devicesAfter = false}) =>
       Row(children: [
-        SizedBox(width: 95, child: Text(name)),
+        SizedBox(width: settingsLabelWidth, child: Text(name)),
         Expanded(
             child: TextField(
                 controller: controller,
@@ -602,58 +605,117 @@ class _HomeState extends State<Home> {
       Color(Theme.of(context).brightness == Brightness.dark ? dark : light);
 
   Future<void> showSettings() async {
+    var mode = widget.themeMode;
     await showDialog<void>(
       context: context,
       builder: (context) => ListenableBuilder(
           listenable: sessions,
           builder: (context, _) => AlertDialog(
-                title: const Text('项目与 Flutter SDK'),
+                title: const Text('设置'),
+                scrollable: true,
                 content: SizedBox(
                     width: 620,
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      if (sdkResolution.executable == null &&
-                          !sdkResolution.isFvm) ...[
-                        pathRow('Flutter SDK', sdk, devicesAfter: true),
-                        const SizedBox(height: 14),
-                      ],
-                      pathRow('项目目录', project),
-                      ValueListenableBuilder<TextEditingValue>(
-                        valueListenable: project,
-                        builder: (_, __, ___) {
-                          final resolution = sdkResolution;
-                          if (resolution.sdkPath == null)
-                            return const SizedBox.shrink();
-                          return Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Text(
-                                resolution.error ??
-                                    (resolution.isFvm
-                                        ? '使用项目 FVM：${resolution.sdkPath}'
-                                        : '自动检测 Flutter SDK：${resolution.sdkPath}'),
-                                style: TextStyle(
-                                    color: resolution.error == null
-                                        ? tone(0xff3578f6, 0xff69b4fc)
-                                        : tone(0xffc6414c, 0xffff858b))),
-                          );
-                        },
-                      ),
-                      if (sessions.active)
-                        const Padding(
-                            padding: EdgeInsets.only(top: 12),
-                            child: Text('请先停止所有会话，再修改 SDK 或项目目录。')),
-                    ])),
+                    child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          const Text('项目与 Flutter SDK'),
+                          const SizedBox(height: 12),
+                          if (sdkResolution.executable == null &&
+                              !sdkResolution.isFvm) ...[
+                            pathRow('Flutter SDK', sdk, devicesAfter: true),
+                            const SizedBox(height: 14),
+                          ],
+                          pathRow('项目目录', project),
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: project,
+                            builder: (_, __, ___) {
+                              final resolution = sdkResolution;
+                              if (resolution.sdkPath == null) {
+                                return const SizedBox.shrink();
+                              }
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 12),
+                                child: Text(
+                                    resolution.error ??
+                                        (resolution.isFvm
+                                            ? '使用项目 FVM：${resolution.sdkPath}'
+                                            : '自动检测 Flutter SDK：${resolution.sdkPath}'),
+                                    style: TextStyle(
+                                        color: resolution.error == null
+                                            ? tone(0xff3578f6, 0xff69b4fc)
+                                            : tone(0xffc6414c, 0xffff858b))),
+                              );
+                            },
+                          ),
+                          if (sessions.active)
+                            const Padding(
+                                padding: EdgeInsets.only(top: 12),
+                                child: Text('请先停止所有会话，再修改 SDK 或项目目录。')),
+                        ])),
                 actions: [
-                  TextButton(
-                      onPressed: () {
-                        save();
-                        Navigator.pop(context);
-                        refresh();
-                        if (!sessions.active) unawaited(discover());
-                      },
-                      child: const Text('完成'))
+                  StatefulBuilder(
+                    builder: (context, setFooterState) {
+                      final followsSystem = mode == ThemeMode.system;
+                      final dark = followsSystem
+                          ? MediaQuery.platformBrightnessOf(context) ==
+                              Brightness.dark
+                          : mode == ThemeMode.dark;
+                      void select(ThemeMode next) {
+                        if (next == mode) return;
+                        setFooterState(() => mode = next);
+                        widget.onThemeChanged(next);
+                      }
+
+                      return Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Row(
+                            children: [
+                              const SizedBox(
+                                width: settingsLabelWidth,
+                                child: Text('深色模式'),
+                              ),
+                              FilterChip(
+                                label: const Text('跟随系统'),
+                                selected: followsSystem,
+                                onSelected: (_) => select(ThemeMode.system),
+                              ),
+                              const SizedBox(width: 6),
+                              SizedBox(
+                                width: 62,
+                                height: 38,
+                                child: FocusModeSwitch(
+                                  focused: dark,
+                                  showStage: false,
+                                  animateIdle: false,
+                                  onChanged: (enabled) => select(
+                                    enabled ? ThemeMode.dark : ThemeMode.light,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          TextButton(
+                            onPressed: () => finishSettings(context),
+                            child: const Text('完成'),
+                          ),
+                        ],
+                      );
+                    },
+                  ),
                 ],
               )),
     );
+  }
+
+  void finishSettings(BuildContext context) {
+    save();
+    Navigator.pop(context);
+    refresh();
+    if (!sessions.active) unawaited(discover());
   }
 
   Color logColor(LogLevel level) => switch (level) {
@@ -761,28 +823,12 @@ class _HomeState extends State<Home> {
                     child: Text('Flutter Run',
                         style: TextStyle(
                             fontSize: 15, fontWeight: FontWeight.w800))),
-                PopupMenuButton<ThemeMode>(
-                    tooltip: '切换外观',
-                    iconSize: 18,
-                    icon: const Icon(Icons.brightness_6_outlined),
-                    onSelected: widget.onThemeChanged,
-                    itemBuilder: (_) => [
-                          for (final (mode, label) in [
-                            (ThemeMode.system, '跟随系统'),
-                            (ThemeMode.light, '浅色模式'),
-                            (ThemeMode.dark, '深色模式'),
-                          ])
-                            CheckedPopupMenuItem(
-                                value: mode,
-                                checked: widget.themeMode == mode,
-                                child: Text(label)),
-                        ]),
                 IconButton(
-                    tooltip: '项目与 SDK 设置',
+                    tooltip: '设置',
                     iconSize: 18,
                     visualDensity: VisualDensity.compact,
                     onPressed: showSettings,
-                    icon: const Icon(Icons.tune_rounded)),
+                    icon: const Icon(Icons.settings_outlined)),
               ])),
           Expanded(
               child: ListView(

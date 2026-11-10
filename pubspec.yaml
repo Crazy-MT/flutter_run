@@ -63,6 +63,8 @@ flutter:
   uses-material-design: true
   assets:
     - assets/tray_icon.png
+  shaders:
+    - shaders/focus_lens.frag
 
   # To add assets to your application, add an assets section, like this:
   # assets:
