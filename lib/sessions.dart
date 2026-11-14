@@ -21,6 +21,16 @@ class Sessions extends ChangeNotifier {
     await Future.wait(_sessions.values.map((session) => session.stop()));
   }
 
+  void clear() {
+    if (active) return;
+    for (final session in _sessions.values) {
+      session.removeListener(notifyListeners);
+      session.dispose();
+    }
+    _sessions.clear();
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     for (final session in _sessions.values) {

@@ -13,6 +13,7 @@ import 'session.dart';
 import 'sdk_resolver.dart';
 import 'sessions.dart';
 import 'tray_actions.dart';
+import 'task_window.dart';
 import 'package:tray_manager/tray_manager.dart' as tray;
 
 void main() {
@@ -91,6 +92,9 @@ class _HomeState extends State<Home> {
       project = TextEditingController(),
       filter = TextEditingController();
   List<Map<String, dynamic>> devices = [], emulators = [];
+  final List<String> projects = [];
+  String savedProject = '';
+  bool openingWindow = false;
   String? device;
   String priority = 'V', tab = '运行日志';
   RunMode runMode = RunMode.debug;
@@ -180,6 +184,7 @@ class _HomeState extends State<Home> {
       return value;
     }
 
+    menu.addItem(item('新建任务窗口', () => unawaited(newTaskWindow())));
     selectedTrayLabel = item('当前设备：未选择', () {});
     selectedTrayLabel!.isEnabled = false;
     menu.addItem(selectedTrayLabel);
@@ -294,8 +299,12 @@ class _HomeState extends State<Home> {
 
   Future<void> load() async {
     final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
     sdk.text = p.getString('sdk') ?? '';
     project.text = p.getString('project') ?? '';
+    savedProject = project.text.trim();
+    projects.addAll((p.getStringList('projects') ?? []).toSet());
+    rememberProject();
     if (project.text.isNotEmpty &&
         !sdkResolution.isFvm &&
         sdkResolution.error == null) {
@@ -309,8 +318,81 @@ class _HomeState extends State<Home> {
 
   Future<void> save() async {
     final p = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    if (savedProject != project.text.trim() && !sessions.active) {
+      logcatGeneration++;
+      logcat?.kill();
+      logcat = null;
+      logcatPid = null;
+      sessions.clear();
+      deviceLogs.clear();
+    }
+    savedProject = project.text.trim();
+    await p.reload();
+    for (final path in p.getStringList('projects') ?? <String>[]) {
+      if (!projects.contains(path)) projects.add(path);
+    }
     await p.setString('sdk', sdk.text.trim());
     await p.setString('project', project.text.trim());
+    rememberProject();
+    await p.setStringList('projects', projects);
+  }
+
+  void rememberProject() {
+    final path = project.text.trim();
+    if (path.isNotEmpty &&
+        File('$path${Platform.pathSeparator}pubspec.yaml').existsSync() &&
+        !projects.contains(path)) {
+      projects.add(path);
+    }
+  }
+
+  Future<void> switchProject(String path) async {
+    if (sessions.active || path == project.text.trim()) return;
+    if (!File('$path${Platform.pathSeparator}pubspec.yaml').existsSync()) {
+      setState(() => status = '项目目录不存在或缺少 pubspec.yaml：$path');
+      return;
+    }
+    discoveryGeneration++;
+    logcatGeneration++;
+    logcat?.kill();
+    logcat = null;
+    logcatPid = null;
+    sessions.clear();
+    deviceLogs.clear();
+    project.text = path;
+    final resolution = resolveFlutterSdk(path, '');
+    if (resolution.executable != null && !resolution.isFvm) {
+      sdk.text = resolution.sdkPath!;
+    }
+    setState(() {
+      device = null;
+      devices = [];
+      emulators = [];
+      connectedDevices = {};
+      busy = false;
+      rebuildTray();
+    });
+    await save();
+    if (mounted) await discover();
+  }
+
+  Future<void> newTaskWindow() async {
+    if (openingWindow) return;
+    setState(() => openingWindow = true);
+    try {
+      await openTaskWindow();
+    } catch (error) {
+      if (mounted) setState(() => status = '新建任务窗口失败：$error');
+    } finally {
+      if (mounted) setState(() => openingWindow = false);
+    }
+  }
+
+  Future<void> addProject() async {
+    final path = await getDirectoryPath();
+    if (!mounted || path == null) return;
+    await switchProject(path);
   }
 
   FlutterSdkResolution get sdkResolution =>
@@ -834,6 +916,14 @@ class _HomeState extends State<Home> {
               child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   children: [
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: OutlinedButton.icon(
+                    onPressed: openingWindow ? null : newTaskWindow,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: const Text('新建任务窗口'),
+                  ),
+                ),
                 sectionTitle('当前项目'),
                 Material(
                     color: tone(0xffffffff, 0xff1b2736),
@@ -878,6 +968,39 @@ class _HomeState extends State<Home> {
                                                 tone(0xff718095, 0xff8191a6)))
                                   ])),
                             ])))),
+                PopupMenuButton<String>(
+                  tooltip: sessions.active ? '请先停止所有会话再切换项目' : '切换项目',
+                  enabled: !sessions.active,
+                  onSelected: (path) {
+                    if (path.isEmpty) {
+                      unawaited(addProject());
+                    } else {
+                      unawaited(switchProject(path));
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    ...projects.map((path) => CheckedPopupMenuItem(
+                          value: path,
+                          checked: path == project.text.trim(),
+                          child: Text(path),
+                        )),
+                    const PopupMenuItem(value: '', child: Text('添加项目…')),
+                  ],
+                  child: Padding(
+                    padding: const EdgeInsets.all(10),
+                    child: Row(children: [
+                      const Icon(Icons.swap_horiz, size: 18),
+                      const SizedBox(width: 8),
+                      Text('切换项目',
+                          style: TextStyle(
+                              color: sessions.active
+                                  ? Theme.of(context).disabledColor
+                                  : null)),
+                      const Spacer(),
+                      const Icon(Icons.expand_more, size: 18),
+                    ]),
+                  ),
+                ),
                 sectionTitle('设备',
                     trailing: IconButton(
                         tooltip: '刷新设备',

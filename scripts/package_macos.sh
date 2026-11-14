@@ -22,6 +22,10 @@ if [[ ! -d "$APP_PATH" ]]; then
   exit 1
 fi
 
+# Incremental Flutter builds can update App.framework after the outer signature.
+codesign --force --sign - --entitlements "$ROOT/macos/Runner/Release.entitlements" "$APP_PATH"
+codesign --verify --deep --strict "$APP_PATH"
+
 mkdir -p "$DIST"
 DMG="$DIST/Flutter-Run-$VERSION-macOS.dmg"
 rm -f "$DMG"

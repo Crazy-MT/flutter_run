@@ -5,6 +5,46 @@ import 'package:flutter_run/main.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  testWidgets('switches saved projects and restores selection', (tester) async {
+    final root = Directory.systemTemp.createTempSync('project-switch');
+    addTearDown(() => root.deleteSync(recursive: true));
+    final first = Directory('${root.path}/first')..createSync();
+    final second = Directory('${root.path}/second')..createSync();
+    for (final dir in [first, second]) {
+      File('${dir.path}/pubspec.yaml').writeAsStringSync('name: example');
+    }
+    final missing = '${root.path}/missing';
+    SharedPreferences.setMockInitialValues({
+      'project': first.path,
+      'projects': [second.path, missing],
+    });
+    await tester.pumpWidget(const RunnerApp());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('切换项目'));
+    await tester.pumpAndSettle();
+    expect(find.text(first.path), findsWidgets);
+    await tester
+        .tap(find.widgetWithText(CheckedPopupMenuItem<String>, second.path));
+    await tester.pumpAndSettle();
+    expect(find.text('second'), findsOneWidget);
+    final prefs = await SharedPreferences.getInstance();
+    expect(prefs.getString('project'), second.path);
+    expect(prefs.getStringList('projects'), contains(first.path));
+    await tester.tap(find.byTooltip('切换项目'));
+    await tester.pumpAndSettle();
+    await tester
+        .tap(find.widgetWithText(CheckedPopupMenuItem<String>, missing));
+    await tester.pumpAndSettle();
+    expect(find.text('second'), findsOneWidget);
+    expect(find.textContaining('缺少 pubspec.yaml'), findsOneWidget);
+    expect(prefs.getString('project'), second.path);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpWidget(const RunnerApp());
+    await tester.pumpAndSettle();
+    expect(find.text('second'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+  });
+
   testWidgets('shows runner controls without a selected project',
       (tester) async {
     SharedPreferences.setMockInitialValues({});
@@ -206,6 +246,12 @@ fi
       await tester.pump();
     }
     expect(find.text('log-100'), findsOneWidget);
+    expect(
+        tester
+            .widget<OutlinedButton>(
+                find.widgetWithText(OutlinedButton, '新建任务窗口'))
+            .onPressed,
+        isNotNull);
     expect(find.text('log-1'), findsNothing);
     await tester.pumpWidget(const SizedBox.shrink());
     dir.deleteSync(recursive: true);
